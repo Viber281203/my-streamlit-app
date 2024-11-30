@@ -4,145 +4,143 @@
 # In[ ]:
 
 
-get_ipython().system('pip install pandas matplotlib scikit-learn seaborn statsmodels tensorflow numpy')
-get_ipython().system('pip install -U vnstock3')
 
 
 
 # In[ ]:
 
 
-import streamlit as st
 import statsmodels.api as sm
 import matplotlib.pyplot as plt
 import pandas as pd
+import seaborn as sns
+import streamlit as st
 
 # Định nghĩa danh sách các mã cổ phiếu cần xử lý
 stock_symbols = ["ACB", "BCM", "BID", "BVH", "CTG", "FPT", "GAS", "GVR", "HDB", "HPG",
     "MBB", "MSN", "MWG", "PLX", "POW", "SAB", "SHB", "SSB", "SSI", "STB",
     "TCB", "TPB", "VCB", "VHM", "VIB", "VIC", "VJC", "VNM", "VPB", "VRE"]  # Thêm các mã cổ phiếu bạn muốn vào đây
 
-# Tạo đường dẫn đến tệp VNIndex
-file2 = r'C:\Users\sonll\Downloads\giá đóng cửa vnindex.xlsx'
+# Tạo giao diện người dùng cho việc tải tệp
+uploaded_file_vnindex = st.file_uploader("Chọn tệp dữ liệu VN-Index", type=["xlsx"])
+uploaded_files_stock = {symbol: st.file_uploader(f"Chọn tệp dữ liệu cổ phiếu {symbol}", type=["xlsx"]) for symbol in stock_symbols}
 
-# Đọc dữ liệu VNIndex
-df_vnindex = pd.read_excel(file2)
+# Kiểm tra nếu người dùng đã tải tệp lên
+if uploaded_file_vnindex is not None:
+    df_vnindex = pd.read_excel(uploaded_file_vnindex)
 
-# Lọc dữ liệu từ năm 2019 trở đi
-df_vnindex['time'] = pd.to_datetime(df_vnindex['time'])
-df_vnindex = df_vnindex[df_vnindex['time'].dt.year >= 2019]
-
-# Khởi tạo danh sách để lưu kết quả Alpha và Beta gần nhất
-ranking_data = []
-
-# Tạo một figure cho biểu đồ
-plt.figure(figsize=(14, 10))
-
-# Xử lý từng mã cổ phiếu
-for stock_symbol in stock_symbols:
-    file1 = f'C:\\Users\\sonll\\Downloads\\giá đóng cửa {stock_symbol}.xlsx'
-    
-    # Đọc dữ liệu từ tệp của từng mã cổ phiếu
-    try:
-        df_symbols = pd.read_excel(file1)
-    except FileNotFoundError:
-        st.warning(f"Tệp cho mã cổ phiếu {stock_symbol} không tồn tại.")
-        continue
-
-    # Đảm bảo rằng cột time trong cả hai DataFrame có kiểu dữ liệu datetime
-    df_symbols['time'] = pd.to_datetime(df_symbols['time'])
+    # Lọc dữ liệu từ năm 2019 trở đi
     df_vnindex['time'] = pd.to_datetime(df_vnindex['time'])
+    df_vnindex = df_vnindex[df_vnindex['time'].dt.year >= 2019]
 
-    # Lọc dữ liệu từ năm 2019 trở đi cho cổ phiếu
-    df_symbols = df_symbols[df_symbols['time'].dt.year >= 2019]
+    # Khởi tạo danh sách để lưu kết quả Alpha và Beta gần nhất
+    ranking_data = []
 
-    # Ghép dữ liệu dựa vào cột time
-    merged_df = pd.merge(df_symbols, df_vnindex, on='time', how='inner')
+    # Tạo một figure cho biểu đồ
+    plt.figure(figsize=(14, 10))
 
-    # Xoá các hàng chứa giá trị NaN
-    merged_df.dropna(inplace=True)
+    # Xử lý từng mã cổ phiếu
+    for stock_symbol, uploaded_file in uploaded_files_stock.items():
+        if uploaded_file is not None:
+            df_symbols = pd.read_excel(uploaded_file)
 
-    # Tính toán return từ cột close (lợi nhuận cổ phiếu và VN-Index)
-    merged_df['return_stock'] = merged_df['close_x'].pct_change()  # Lợi nhuận cổ phiếu
-    merged_df['return_vnindex'] = merged_df['close_y'].pct_change()  # Lợi nhuận VN-Index
+            # Đảm bảo rằng cột time trong cả hai DataFrame có kiểu dữ liệu datetime
+            df_symbols['time'] = pd.to_datetime(df_symbols['time'])
+            df_vnindex['time'] = pd.to_datetime(df_vnindex['time'])
 
-    # Tính Alpha và Beta bằng hồi quy tuyến tính
-    betas = []
-    alphas = []
-    dates = []
+            # Lọc dữ liệu từ năm 2019 trở đi cho cổ phiếu
+            df_symbols = df_symbols[df_symbols['time'].dt.year >= 2019]
 
-    # Thực hiện hồi quy với cửa sổ 30 ngày
-    window = 30
-    for i in range(window, len(merged_df)):
-        # Lấy dữ liệu của 30 ngày trước
-        window_data = merged_df.iloc[i-window:i]
+            # Ghép dữ liệu dựa vào cột time
+            merged_df = pd.merge(df_symbols, df_vnindex, on='time', how='inner')
 
-        # Lấy lợi nhuận cổ phiếu và VN-Index
-        y = window_data['return_stock']
-        X = window_data['return_vnindex']
+            # Xoá các hàng chứa giá trị NaN
+            merged_df.dropna(inplace=True)
 
-        # Kiểm tra và loại bỏ bất kỳ giá trị NaN hoặc Inf trong X và y
-        if y.isnull().any() or X.isnull().any() or (y == float('inf')).any() or (X == float('inf')).any():
-            continue  # Bỏ qua dòng này nếu có NaN hoặc Inf
+            # Tính toán return từ cột close (lợi nhuận cổ phiếu và VN-Index)
+            merged_df['return_stock'] = merged_df['close_x'].pct_change()  # Lợi nhuận cổ phiếu
+            merged_df['return_vnindex'] = merged_df['close_y'].pct_change()  # Lợi nhuận VN-Index
 
-        # Thêm cột constant (hằng số) cho hồi quy
-        X = sm.add_constant(X)
+            # Tính Alpha và Beta bằng hồi quy tuyến tính
+            betas = []
+            alphas = []
+            dates = []
 
-        # Hồi quy tuyến tính
-        model = sm.OLS(y, X).fit()
+            # Thực hiện hồi quy với cửa sổ 30 ngày
+            window = 30
+            for i in range(window, len(merged_df)):
+                # Lấy dữ liệu của 30 ngày trước
+                window_data = merged_df.iloc[i-window:i]
 
-        # Lấy Alpha và Beta (Alpha là hệ số intercept, Beta là hệ số của VN-Index)
-        alpha = model.params[0]  # Hệ số của intercept (Alpha)
-        beta = model.params[1]   # Hệ số của VN-Index (Beta)
-        p_value = model.pvalues[1]  # Lấy p-value của Beta
+                # Lấy lợi nhuận cổ phiếu và VN-Index
+                y = window_data['return_stock']
+                X = window_data['return_vnindex']
 
-        # Chỉ lưu Alpha và Beta nếu p-value < 0.05 (Có ý nghĩa thống kê)
-        if p_value < 0.05:
-            betas.append(beta)
-            alphas.append(alpha)
-            dates.append(merged_df['time'].iloc[i])
+                # Kiểm tra và loại bỏ bất kỳ giá trị NaN hoặc Inf trong X và y
+                if y.isnull().any() or X.isnull().any() or (y == float('inf')).any() or (X == float('inf')).any():
+                    continue  # Bỏ qua dòng này nếu có NaN hoặc Inf
 
-    # Lưu Alpha và Beta gần nhất của cổ phiếu vào danh sách
-    if alphas and betas:  # Kiểm tra nếu có giá trị Alpha và Beta
-        latest_alpha = alphas[-1]
-        latest_beta = betas[-1]
-        ranking_data.append([stock_symbol, latest_alpha, latest_beta])
+                # Thêm cột constant (hằng số) cho hồi quy
+                X = sm.add_constant(X)
 
-    # Vẽ biểu đồ Beta và Alpha cho từng mã cổ phiếu
-    # Biểu đồ Beta
-    plt.subplot(len(stock_symbols), 2, 2*stock_symbols.index(stock_symbol) + 1)
-    plt.plot(dates, betas, label=f'Beta ({stock_symbol})', color='blue')
-    plt.title(f'Biểu đồ Beta của cổ phiếu {stock_symbol} so với VN-Index')
-    plt.xlabel('Ngày')
-    plt.ylabel('Beta')
-    plt.legend()
-    plt.grid(True)
+                # Hồi quy tuyến tính
+                model = sm.OLS(y, X).fit()
 
-    # Biểu đồ Alpha
-    plt.subplot(len(stock_symbols), 2, 2*stock_symbols.index(stock_symbol) + 2)
-    plt.plot(dates, alphas, label=f'Alpha ({stock_symbol})', color='green')
-    plt.title(f'Biểu đồ Alpha của cổ phiếu {stock_symbol} so với VN-Index')
-    plt.xlabel('Ngày')
-    plt.ylabel('Alpha')
-    plt.legend()
-    plt.grid(True)
+                # Lấy Alpha và Beta (Alpha là hệ số intercept, Beta là hệ số của VN-Index)
+                alpha = model.params[0]  # Hệ số của intercept (Alpha)
+                beta = model.params[1]   # Hệ số của VN-Index (Beta)
+                p_value = model.pvalues[1]  # Lấy p-value của Beta
 
-# Chuyển danh sách xếp hạng thành DataFrame
-ranking_df = pd.DataFrame(ranking_data, columns=['Mã cổ phiếu', 'Alpha', 'Beta'])
+                # Chỉ lưu Alpha và Beta nếu p-value < 0.05 (Có ý nghĩa thống kê)
+                if p_value < 0.05:
+                    betas.append(beta)
+                    alphas.append(alpha)
+                    dates.append(merged_df['time'].iloc[i])
 
-# Sắp xếp bảng xếp hạng theo Alpha từ lớn đến nhỏ
-ranking_df = ranking_df.sort_values(by='Alpha', ascending=False)
+            # Lưu Alpha và Beta gần nhất của cổ phiếu vào danh sách
+            if alphas and betas:  # Kiểm tra nếu có giá trị Alpha và Beta
+                latest_alpha = alphas[-1]
+                latest_beta = betas[-1]
+                ranking_data.append([stock_symbol, latest_alpha, latest_beta])
 
-# Đặt lại chỉ số bắt đầu từ 1
-ranking_df.reset_index(drop=True, inplace=True)
-ranking_df.index += 1  # Đặt chỉ số bắt đầu từ 1
+            # Vẽ biểu đồ Beta và Alpha cho từng mã cổ phiếu
+            # Biểu đồ Beta
+            plt.subplot(len(stock_symbols), 2, 2*stock_symbols.index(stock_symbol) + 1)
+            plt.plot(dates, betas, label=f'Beta ({stock_symbol})', color='blue')
+            plt.title(f'Biểu đồ Beta của cổ phiếu {stock_symbol} so với VN-Index')
+            plt.xlabel('Ngày')
+            plt.ylabel('Beta')
+            plt.legend()
+            plt.grid(True)
 
-# Hiển thị bảng xếp hạng
-st.dataframe(ranking_df)
+            # Biểu đồ Alpha
+            plt.subplot(len(stock_symbols), 2, 2*stock_symbols.index(stock_symbol) + 2)
+            plt.plot(dates, alphas, label=f'Alpha ({stock_symbol})', color='green')
+            plt.title(f'Biểu đồ Alpha của cổ phiếu {stock_symbol} so với VN-Index')
+            plt.xlabel('Ngày')
+            plt.ylabel('Alpha')
+            plt.legend()
+            plt.grid(True)
 
-# Hiển thị biểu đồ với Streamlit
-plt.tight_layout()
-st.pyplot()
+    # Chuyển danh sách xếp hạng thành DataFrame
+    ranking_df = pd.DataFrame(ranking_data, columns=['Mã cổ phiếu', 'Alpha', 'Beta'])
+
+    # Sắp xếp bảng xếp hạng theo Alpha từ lớn đến nhỏ
+    ranking_df = ranking_df.sort_values(by='Alpha', ascending=False)
+
+    # Đặt lại chỉ số bắt đầu từ 1
+    ranking_df.reset_index(drop=True, inplace=True)
+    ranking_df.index += 1  # Đặt chỉ số bắt đầu từ 1
+
+    # Hiển thị bảng xếp hạng
+    st.dataframe(ranking_df)
+
+    # Hiển thị biểu đồ với Streamlit
+    plt.tight_layout()
+    st.pyplot()
+else:
+    st.warning("Vui lòng tải tệp dữ liệu VN-Index và các tệp cổ phiếu.")
+
 
 
 # In[ ]:
